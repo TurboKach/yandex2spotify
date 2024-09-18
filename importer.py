@@ -16,7 +16,7 @@ MAX_REQUEST_RETRIES = 5
 
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s'
+    format='[%(filename)s:%(lineno)s - %(funcName)20s() ] %(asctime)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
@@ -43,17 +43,28 @@ def handle_spotify_exception(func):
             try:
                 return func(*args, **kwargs)
             except SpotifyException as exception:
-                if exception.http_status != 429:
+                if exception.http_status not in [429, 404]:
                     raise exception
 
                 if 'retry-after' in exception.headers:
                     sleep(int(exception.headers['retry-after']) + 1)
+                    
             except ReadTimeout as exception:
                 logger.info(f'Read timed out. Retrying #{retry}...')
 
                 if retry > MAX_REQUEST_RETRIES:
                     logger.info('Max retries reached.')
                     raise exception
+
+                logger.info('Trying again...')
+                retry += 1
+
+            except Exception as e:
+                logger.error(f'{e}\n\nRetrying #{retry}...')
+
+                if retry > MAX_REQUEST_RETRIES:
+                    logger.info('Max retries reached. PASSING...')
+                    break
 
                 logger.info('Trying again...')
                 retry += 1
